@@ -6,12 +6,24 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import SignInScreen from '../screens/auth/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
+import RoutineManageScreen from '../screens/RoutineManageScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
+import StatsScreen from '../screens/StatsScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import WorkoutDetailScreen from '../screens/WorkoutDetailScreen';
 
 const Tab = createBottomTabNavigator();
+const HomeStack = createNativeStackNavigator();
 const HistoryStack = createNativeStackNavigator();
+
+function HomeStackNavigator() {
+  return (
+    <HomeStack.Navigator>
+      <HomeStack.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
+      <HomeStack.Screen name="RoutineManage" component={RoutineManageScreen} options={{ title: '템플릿 관리' }} />
+    </HomeStack.Navigator>
+  );
+}
 
 function HistoryStackNavigator() {
   return (
@@ -25,8 +37,9 @@ function HistoryStackNavigator() {
 function MainTabs() {
   return (
     <Tab.Navigator>
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
+      <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ title: '홈', headerShown: false }} />
       <Tab.Screen name="Workout" component={WorkoutScreen} options={{ title: '운동' }} />
+      <Tab.Screen name="Stats" component={StatsScreen} options={{ title: '통계' }} />
       <Tab.Screen name="HistoryTab" component={HistoryStackNavigator} options={{ title: '기록', headerShown: false }} />
     </Tab.Navigator>
   );

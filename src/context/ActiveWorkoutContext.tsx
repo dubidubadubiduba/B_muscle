@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 
 interface ActiveWorkoutContextValue {
   activeWorkoutId: string | null;
-  startWorkout: (date: string, bodyPart: string) => Promise<void>;
+  startWorkout: (date: string, bodyPart: string, templateId?: string | null) => Promise<void>;
   finishWorkout: () => Promise<void>;
 }
 
@@ -22,7 +22,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
   const [activeWorkoutId, setActiveWorkoutId] = useState<string | null>(null);
 
   const startWorkout = useCallback(
-    async (date: string, bodyPart: string) => {
+    async (date: string, bodyPart: string, templateId?: string | null) => {
       if (!session) return;
       const { data, error } = await supabase
         .from('workouts')
@@ -35,6 +35,27 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
         .select('id')
         .single();
       if (error) throw error;
+
+      if (templateId) {
+        const { data: templateExercises, error: templateError } = await supabase
+          .from('routine_template_exercises')
+          .select('exercise_id, order_index')
+          .eq('template_id', templateId)
+          .order('order_index');
+        if (templateError) throw templateError;
+
+        if (templateExercises && templateExercises.length > 0) {
+          const { error: insertError } = await supabase.from('workout_exercises').insert(
+            templateExercises.map((te) => ({
+              workout_id: data.id,
+              exercise_id: te.exercise_id,
+              order_index: te.order_index,
+            }))
+          );
+          if (insertError) throw insertError;
+        }
+      }
+
       setActiveWorkoutId(data.id);
     },
     [session]

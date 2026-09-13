@@ -45,3 +45,34 @@ export interface WorkoutSet {
   hold_seconds: number | null;
   created_at: string;
 }
+
+export interface ExerciseSetHistoryRow {
+  set_id: string;
+  weight_kg: number | null;
+  reps: number | null;
+  set_type: SetType;
+  hold_seconds: number | null;
+  created_at: string;
+  exercise_id: string;
+  exercise_name: string;
+  workout_id: string;
+  user_id: string;
+  date: string;
+  body_part: string | null;
+}
+
+export interface RoutineTemplate {
+  id: string;
+  user_id: string;
+  name: string;
+  body_part: string | null;
+  created_at: string;
+}
+
+export interface RoutineTemplateExercise {
+  id: string;
+  template_id: string;
+  exercise_id: string;
+  order_index: number;
+  created_at: string;
+}
