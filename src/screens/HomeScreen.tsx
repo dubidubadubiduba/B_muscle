@@ -110,6 +110,9 @@ export default function HomeScreen() {
       <Button mode="text" onPress={() => navigation.navigate('RoutineManage')} style={styles.manageButton}>
         템플릿 관리
       </Button>
+      <Button mode="text" onPress={() => navigation.navigate('Import')} style={styles.manageButton}>
+        기록 가져오기
+      </Button>
 
       <Text variant="titleMedium" style={styles.sectionTitle}>
         최근 기록

@@ -37,6 +37,7 @@ yarn-error.*
 # local tooling state
 .omc/
 .claude/settings.local.json
+supabase/.temp/
 
 # typescript
 *.tsbuildinfo

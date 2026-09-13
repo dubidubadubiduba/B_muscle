@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import SignInScreen from '../screens/auth/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import RoutineManageScreen from '../screens/RoutineManageScreen';
+import ImportScreen from '../screens/ImportScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import StatsScreen from '../screens/StatsScreen';
 import HistoryScreen from '../screens/HistoryScreen';
@@ -21,6 +22,7 @@ function HomeStackNavigator() {
     <HomeStack.Navigator>
       <HomeStack.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
       <HomeStack.Screen name="RoutineManage" component={RoutineManageScreen} options={{ title: '템플릿 관리' }} />
+      <HomeStack.Screen name="Import" component={ImportScreen} options={{ title: '기록 가져오기' }} />
     </HomeStack.Navigator>
   );
 }
