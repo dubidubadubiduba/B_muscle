@@ -47,13 +47,18 @@ export default function ImportScreen() {
         const context = (invokeError as { context?: Response }).context;
         if (context) {
           try {
-            const body = await context.json();
-            detail = body?.error ?? detail;
+            const bodyText = await context.text();
+            try {
+              const body = JSON.parse(bodyText);
+              detail = body?.error ?? body?.message ?? body?.msg ?? bodyText;
+            } catch {
+              detail = bodyText || detail;
+            }
           } catch {
-            // response body wasn't JSON; fall back to the generic message
+            // response body couldn't be read at all; fall back to the generic message
           }
         }
-        throw new Error(detail);
+        throw new Error(`[${context?.status ?? '?'}] ${detail}`);
       }
       if (data?.error) throw new Error(data.error);
       setParsedWorkouts((data?.workouts as ParsedWorkout[]) ?? []);
