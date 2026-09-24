@@ -1,55 +1,54 @@
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-const ANTHROPIC_MODEL = 'claude-sonnet-5';
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash';
+const QUOTA_EXCEEDED_MESSAGE = '사용량이 넘어가서 현재 이용할 수 없습니다. 잠시 후 다시 시도해주세요.';
+const OVERLOADED_MESSAGE = '지금 요청이 몰려서 분석에 실패했어요. 잠시 후 다시 시도해주세요.';
+const MAX_ATTEMPTS = 5;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const IMPORT_WORKOUTS_TOOL = {
-  name: 'import_workouts',
-  description: 'Structured workout log extracted from free-form Korean workout notes.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      workouts: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            date: { type: 'string', description: 'YYYY-MM-DD' },
-            bodyPart: { type: ['string', 'null'] },
-            estimatedCalories: { type: ['number', 'null'] },
-            exercises: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  sets: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        weightKg: { type: ['number', 'null'] },
-                        reps: { type: ['number', 'null'] },
-                        setType: { type: 'string', enum: ['normal', 'drop', 'assisted'] },
-                        holdSeconds: { type: ['number', 'null'] },
-                      },
-                      required: ['setType'],
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    workouts: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          date: { type: 'STRING', description: 'YYYY-MM-DD' },
+          bodyPart: { type: 'STRING', nullable: true },
+          estimatedCalories: { type: 'NUMBER', nullable: true },
+          exercises: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                name: { type: 'STRING' },
+                sets: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      weightKg: { type: 'NUMBER', nullable: true },
+                      reps: { type: 'NUMBER', nullable: true },
+                      setType: { type: 'STRING', enum: ['normal', 'drop', 'assisted'] },
+                      holdSeconds: { type: 'NUMBER', nullable: true },
                     },
+                    required: ['setType'],
                   },
                 },
-                required: ['name', 'sets'],
               },
+              required: ['name', 'sets'],
             },
           },
-          required: ['date', 'exercises'],
         },
+        required: ['date', 'exercises'],
       },
     },
-    required: ['workouts'],
   },
+  required: ['workouts'],
 };
 
 const SYSTEM_PROMPT =
@@ -60,16 +59,15 @@ const SYSTEM_PROMPT =
   '등척성 홀드 예시 10초 정지 홀드 는 holdSeconds에 초 단위 숫자를 채웁니다 없으면 null' + '\n' +
   '일반 세트는 setType normal' + '\n' +
   '날짜가 명시되어 있지 않은 항목은 건너뜁니다' + '\n' +
-  '원문에 없는 숫자는 절대 지어내지 말고 null로 둡니다' + '\n' +
-  'import_workouts 도구를 반드시 호출해서 결과를 반환하세요';
+  '원문에 없는 숫자는 절대 지어내지 말고 null로 둡니다';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY is not configured' }), {
+  if (!GEMINI_API_KEY) {
+    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY is not configured' }), {
       status: 500,
       headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
     });
@@ -85,49 +83,86 @@ Deno.serve(async (req) => {
       });
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: text }],
-        tools: [IMPORT_WORKOUTS_TOOL],
-        tool_choice: { type: 'tool', name: 'import_workouts' },
-      }),
-    });
+    const url =
+      'https://generativelanguage.googleapis.com/v1beta/models/' +
+      GEMINI_MODEL +
+      ':generateContent?key=' +
+      GEMINI_API_KEY;
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      return new Response(JSON.stringify({ error: 'Anthropic API error: ' + errorBody }), {
+    let response: Response | null = null;
+    let errorText = '';
+    let errorStatus = '';
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ parts: [{ text }] }],
+          generationConfig: {
+            response_mime_type: 'application/json',
+            response_schema: RESPONSE_SCHEMA,
+          },
+        }),
+      });
+
+      if (response.ok) break;
+
+      errorText = await response.text();
+      errorStatus = '';
+      try {
+        errorStatus = JSON.parse(errorText)?.error?.status ?? '';
+      } catch {
+        // leave errorStatus empty if the body isn't JSON
+      }
+
+      const isOverloaded = response.status === 503 || errorStatus === 'UNAVAILABLE';
+      if (!isOverloaded || attempt === MAX_ATTEMPTS) break;
+
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+    }
+
+    if (!response || !response.ok) {
+      if (response?.status === 429 || errorStatus === 'RESOURCE_EXHAUSTED') {
+        return new Response(JSON.stringify({ error: QUOTA_EXCEEDED_MESSAGE }), {
+          status: 429,
+          headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
+        });
+      }
+      if (response?.status === 503 || errorStatus === 'UNAVAILABLE') {
+        return new Response(JSON.stringify({ error: OVERLOADED_MESSAGE }), {
+          status: 503,
+          headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
+        });
+      }
+      return new Response(JSON.stringify({ error: 'Gemini API error: ' + errorText }), {
         status: 502,
         headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
       });
     }
 
     const data = await response.json();
-    const blocks = data.content || [];
-    let toolUse = null;
-    for (let i = 0; i < blocks.length; i += 1) {
-      if (blocks[i].type === 'tool_use') {
-        toolUse = blocks[i];
-        break;
-      }
-    }
+    const text_ = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!toolUse) {
+    if (!text_) {
       return new Response(JSON.stringify({ error: 'No structured result returned' }), {
         status: 502,
         headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
       });
     }
 
-    return new Response(JSON.stringify(toolUse.input), {
+    let parsed;
+    try {
+      parsed = JSON.parse(text_);
+    } catch {
+      return new Response(JSON.stringify({ error: 'Could not parse structured result' }), {
+        status: 502,
+        headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
+      });
+    }
+
+    return new Response(JSON.stringify(parsed), {
       headers: Object.assign({}, corsHeaders, { 'Content-Type': 'application/json' }),
     });
   } catch (error) {

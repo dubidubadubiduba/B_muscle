@@ -19,7 +19,12 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "B_muscle",
+      "shortName": "B_muscle",
+      "themeColor": "#E6F4FE",
+      "backgroundColor": "#E6F4FE",
+      "display": "standalone"
     }
   }
 }
