@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, TextInput } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
 import { ensureExerciseByName } from '../lib/exercises';
@@ -176,9 +176,21 @@ export default function ImportScreen() {
                     {workout.estimatedCalories ? ` · 약 ${workout.estimatedCalories}kcal` : ''}
                   </Text>
                   {workout.exercises.map((exercise) => (
-                    <Text key={exercise.name} variant="bodySmall" style={styles.exerciseLine}>
-                      - {exercise.name} ({exercise.sets.length}세트)
-                    </Text>
+                    <View key={exercise.name}>
+                      <Text variant="bodySmall" style={styles.exerciseLine}>
+                        - {exercise.name} ({exercise.sets.length}세트)
+                      </Text>
+                      {exercise.sets.map((set, setIndex) => (
+                        <Text key={setIndex} variant="bodySmall" style={styles.setLine}>
+                          {'  '}
+                          {set.weightKg != null ? `${set.weightKg}kg` : '체중'}
+                          {' × '}
+                          {set.reps != null ? `${set.reps}회` : '?'}
+                          {set.setType !== 'normal' ? ` (${set.setType === 'drop' ? '드롭' : '보조'})` : ''}
+                          {set.holdSeconds != null ? ` · ${set.holdSeconds}초 홀드` : ''}
+                        </Text>
+                      ))}
+                    </View>
                   ))}
                   <Button mode="text" compact onPress={() => removeWorkout(index)}>
                     이 항목 제외
@@ -204,6 +216,7 @@ const styles = StyleSheet.create({
   previewTitle: { marginTop: 16, marginBottom: 8 },
   card: { marginBottom: 12 },
   exerciseLine: { marginTop: 2 },
+  setLine: { color: '#666' },
   muted: { color: '#888', marginTop: 4, marginBottom: 8 },
   error: { color: 'red', marginTop: 8 },
   success: { color: '#2e7d32', marginTop: 8 },

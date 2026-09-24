@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Button, Card, Chip, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -7,7 +7,42 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useActiveWorkout } from '../context/ActiveWorkoutContext';
 import { BODY_PARTS } from '../constants';
-import type { RoutineTemplate, Workout } from '../types/database';
+import type { ExerciseSetHistoryRow, RoutineTemplate, Workout } from '../types/database';
+
+interface ExerciseSessionSummary {
+  exerciseId: string;
+  exerciseName: string;
+  date: string;
+  topWeight: number;
+  repsAtTopWeight: number | null;
+  setCount: number;
+}
+
+function summarizeSessions(rows: ExerciseSetHistoryRow[]): ExerciseSessionSummary[] {
+  const sessions = new Map<string, ExerciseSessionSummary>();
+  rows.forEach((row) => {
+    const key = `${row.workout_id}_${row.exercise_id}`;
+    const weight = row.weight_kg ?? 0;
+    const existing = sessions.get(key);
+    if (!existing) {
+      sessions.set(key, {
+        exerciseId: row.exercise_id,
+        exerciseName: row.exercise_name,
+        date: row.date,
+        topWeight: weight,
+        repsAtTopWeight: row.reps,
+        setCount: 1,
+      });
+    } else {
+      existing.setCount += 1;
+      if (weight > existing.topWeight) {
+        existing.topWeight = weight;
+        existing.repsAtTopWeight = row.reps;
+      }
+    }
+  });
+  return Array.from(sessions.values());
+}
 
 export default function HomeScreen() {
   const { session } = useAuth();
@@ -43,6 +78,31 @@ export default function HomeScreen() {
     },
     enabled: !!session,
   });
+
+  const { data: exerciseHistory } = useQuery({
+    queryKey: ['exercise-history-dashboard', session?.user.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('exercise_set_history').select('*');
+      if (error) throw error;
+      return data as ExerciseSetHistoryRow[];
+    },
+    enabled: !!session,
+  });
+
+  const exerciseDashboard = useMemo(() => {
+    const sessions = summarizeSessions(exerciseHistory ?? []);
+    const byExercise = new Map<string, { name: string; latest: ExerciseSessionSummary; best: ExerciseSessionSummary }>();
+    sessions.forEach((s) => {
+      const existing = byExercise.get(s.exerciseId);
+      if (!existing) {
+        byExercise.set(s.exerciseId, { name: s.exerciseName, latest: s, best: s });
+        return;
+      }
+      if (s.date > existing.latest.date) existing.latest = s;
+      if (s.topWeight > existing.best.topWeight) existing.best = s;
+    });
+    return Array.from(byExercise.values()).sort((a, b) => (a.latest.date < b.latest.date ? 1 : -1));
+  }, [exerciseHistory]);
 
   function handleSelectTemplate(template: RoutineTemplate) {
     if (selectedTemplateId === template.id) {
@@ -115,6 +175,29 @@ export default function HomeScreen() {
       </Button>
 
       <Text variant="titleMedium" style={styles.sectionTitle}>
+        운동별 기록
+      </Text>
+      {exerciseDashboard.length === 0 ? (
+        <Text style={styles.empty}>아직 기록이 없어요</Text>
+      ) : (
+        exerciseDashboard.map((item) => (
+          <Card key={item.name} style={styles.card}>
+            <Card.Content>
+              <Text variant="titleSmall">{item.name}</Text>
+              <Text variant="bodySmall" style={styles.muted}>
+                최근 · {item.latest.topWeight}kg × {item.latest.repsAtTopWeight ?? '?'}회 × {item.latest.setCount}세트 (
+                {item.latest.date})
+              </Text>
+              <Text variant="bodySmall" style={styles.muted}>
+                최고 · {item.best.topWeight}kg × {item.best.repsAtTopWeight ?? '?'}회 × {item.best.setCount}세트 (
+                {item.best.date})
+              </Text>
+            </Card.Content>
+          </Card>
+        ))
+      )}
+
+      <Text variant="titleMedium" style={styles.sectionTitle}>
         최근 기록
       </Text>
       <FlatList
@@ -147,5 +230,6 @@ const styles = StyleSheet.create({
   manageButton: { marginBottom: 16 },
   sectionTitle: { marginBottom: 8 },
   card: { marginBottom: 8 },
+  muted: { color: '#888', marginTop: 2 },
   empty: { textAlign: 'center', color: '#888', marginTop: 16 },
 });
